@@ -1,0 +1,46 @@
+name: ESPHome Compile Check
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        example:
+          - examples/esp32-example.yaml
+          - examples/esp32-deep-sleep-example.yaml
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install ESPHome
+        run: |
+          pip install --upgrade pip
+          pip install esphome
+
+      - name: Print ESPHome version
+        run: esphome version
+
+      - name: Create placeholder secrets.yaml
+        run: |
+          cat > secrets.yaml <<'EOF'
+          wifi_ssid: "ci_compile_test"
+          wifi_password: "ci_compile_test"
+          api_encryption_key: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ota_password: "ci_compile"
+          EOF
+
+      - name: Compile ${{ matrix.example }}
+        run: esphome compile ${{ matrix.example }}

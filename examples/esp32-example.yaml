@@ -1,0 +1,125 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# MAX17055 ESPHome Example – ESP32, standard operation (no deep sleep)
+#
+# Hardware assumptions:
+#   • 1S LiPo / Li-ion cell, nominal 3.7 V, design capacity 2000 mAh
+#   • Charge voltage ≤ 4.2 V  → charge_voltage_above_4v275: false
+#   • 10 mΩ sense resistor placed IN the main charge/discharge path
+#     (between BAT pin and the rest of the circuit)
+#   • MAX17055 supplied from the cell (BAT rail), not just 3.3 V
+#   • ESP32 GPIO 21 = SDA, GPIO 22 = SCL (adjust for your board)
+#
+# Sense-resistor placement note:
+#   The MAX17055 measures current as the voltage drop across a shunt (Rsense).
+#   The shunt MUST be placed in the complete current path, i.e. every milliamp
+#   that goes into or out of the cell must flow through it.  A breakout board
+#   that only has the chip but not the shunt will NOT give correct current or
+#   capacity readings – only the voltage will be accurate in that case.
+# ─────────────────────────────────────────────────────────────────────────────
+
+esphome:
+  name: battery-monitor
+  friendly_name: Battery Monitor
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+# Reference the external component from the repo root
+external_components:
+  - source:
+      type: local
+      path: ../components
+    components: [max17055]
+
+# Logging – set to DEBUG during first-time setup to see init sequence
+logger:
+  level: INFO
+
+# Home Assistant API
+api:
+  encryption:
+    key: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa="  # replace with your key
+
+ota:
+  - platform: esphome
+    password: "change_me"
+
+wifi:
+  ssid: "your_wifi_ssid"       # replace or use !secret wifi_ssid
+  password: "your_wifi_pass"   # replace or use !secret wifi_password
+  ap:
+    ssid: "Battery Monitor Fallback"
+
+captive_portal:
+
+# ── I2C bus ───────────────────────────────────────────────────────────────────
+i2c:
+  sda: GPIO21
+  scl: GPIO22
+  scan: true          # logs all found I2C addresses; disable in production
+  frequency: 100000   # 100 kHz; MAX17055 supports up to 400 kHz
+
+# ── MAX17055 sensor platform ──────────────────────────────────────────────────
+sensor:
+  - platform: max17055
+    address: 0x36          # factory default; cannot be changed on MAX17055
+    update_interval: 60s   # 60 s is reasonable; avoid < 10 s
+
+    # ── Battery model parameters ──────────────────────────────────────────
+    design_capacity_mah: 2000         # Ah capacity of the cell (2000 mAh here)
+    sense_resistor_mohm: 10           # shunt resistance in mΩ (0.010 Ω)
+    charge_termination_current_ma: 100 # IChgTerm: end-of-charge detection (~C/20)
+    empty_voltage_mv: 3000            # VEmpty: cell considered empty at 3.0 V
+    recovery_voltage_mv: 3800         # VRecovery: hysteresis recovery point
+    charge_voltage_above_4v275: false  # true = high-voltage cell (e.g. 4.35 V)
+
+    # ── Optional flags ────────────────────────────────────────────────────
+    debug_registers: false   # set true during development; logs all registers
+    force_init: false         # forces EZ-config even if POR bit is clear
+
+    # ── Sensors ───────────────────────────────────────────────────────────
+    # Recommended sensor for Home Assistant battery card:
+    state_of_charge:           # RepSOC – filtered by ModelGauge m5
+      name: "Battery SoC"
+      id: battery_soc
+
+    battery_voltage:
+      name: "Battery Voltage"
+      id: battery_voltage
+
+    current:
+      # Positive = discharging, negative = charging (convention per MAX17055)
+      name: "Battery Current"
+      id: battery_current
+
+    average_current:
+      name: "Battery Average Current"
+
+    remaining_capacity:
+      name: "Battery Remaining Capacity"
+
+    full_capacity:
+      # Tracks learned full capacity; decreases as the cell ages
+      name: "Battery Full Capacity"
+
+    time_to_empty:
+      name: "Battery Time to Empty"  # NaN when not discharging
+
+    time_to_full:
+      name: "Battery Time to Full"   # NaN when not charging
+
+    temperature:
+      # Reports die temperature by default (Config.Tsel = 0).
+      # Connect an NTC to AIN pin and set Config.Tsel = 1 for cell temperature.
+      name: "Battery Temperature"
+
+    cycle_count:
+      name: "Battery Cycle Count"
+
+    average_state_of_charge:
+      name: "Battery AvSOC"          # useful cross-check vs RepSOC
+
+    age:
+      name: "Battery Age"            # 100% = new cell; decreases as capacity fades

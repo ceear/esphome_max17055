@@ -1,0 +1,121 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# MAX17055 Deep Sleep Example – Variant A
+#
+# Strategy: MAX17055 remains permanently powered from the cell.
+#           The ESP32 sleeps between readings.
+#
+# Key insight:
+#   After a power-on reset the MAX17055 needs the EZ-config written once.
+#   On subsequent ESP32 wakeups the POR bit is clear → setup() detects this
+#   and skips re-initialization.  The ModelGauge m5 algorithm runs
+#   continuously in the chip, so SoC accuracy is maintained during deep sleep.
+#
+# Hardware requirements for this variant:
+#   • MAX17055 BAT / VBAT pin connected directly to the cell (+) terminal
+#   • MAX17055 GND connected to the cell (−) terminal
+#   • MAX17055 VDD connected to 3.3 V (from regulator, stays on or comes from
+#     the cell rail via a low-drop LDO)
+#   • ESP32 EN pin controlled by a deep-sleep wakeup circuit (built-in timer)
+#   • The charge/discharge current path includes the shunt before any load,
+#     so ALL cell current flows through the sense resistor
+#
+# Timing (adjust to taste):
+#   • run_duration: 20 s  – enough for WiFi connect + sensor read + publish
+#   • sleep_duration: 5 min – set longer for very low-power nodes
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+esphome:
+  name: battery-sensor-sleepy
+  friendly_name: Battery Sensor (Deep Sleep)
+  # A short on_boot delay lets the MAX17055 stabilise after the ESP32 powers
+  # up its I2C lines.  50–100 ms is sufficient; the chip itself is already
+  # running.
+  on_boot:
+    priority: 600
+    then:
+      - delay: 100ms
+      - logger.log: "Wakeup complete – reading MAX17055"
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+external_components:
+  - source:
+      type: local
+      path: ../components
+    components: [max17055]
+
+logger:
+  level: INFO
+
+api:
+  encryption:
+    key: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa="
+
+ota:
+  - platform: esphome
+    password: "change_me"
+
+wifi:
+  ssid: "your_wifi_ssid"
+  password: "your_wifi_pass"
+  # Fast connect speeds up wakeup cycles
+  fast_connect: true
+  ap:
+    ssid: "BatterySleepy Fallback"
+
+i2c:
+  sda: GPIO21
+  scl: GPIO22
+  scan: false          # disable scan during production deep-sleep cycles
+  frequency: 100000
+
+# ── Deep sleep ────────────────────────────────────────────────────────────────
+deep_sleep:
+  id: deep_sleep_ctrl
+  run_duration: 20s    # stay awake long enough to connect and publish
+  sleep_duration: 5min
+
+# ── MAX17055 ──────────────────────────────────────────────────────────────────
+sensor:
+  - platform: max17055
+    address: 0x36
+    # Slightly lower interval than run_duration so we get exactly one reading
+    update_interval: 10s
+
+    # ── Battery parameters (1S LiPo 3000 mAh example) ────────────────────
+    design_capacity_mah: 3000
+    sense_resistor_mohm: 10
+    charge_termination_current_ma: 150
+    empty_voltage_mv: 3000
+    recovery_voltage_mv: 3800
+    charge_voltage_above_4v275: false
+
+    # skip_initialization: false  (default) – let setup() detect POR
+    # force_init: false            (default) – do not re-run EZ-config every boot
+
+    state_of_charge:
+      name: "Battery SoC"
+      on_value:
+        then:
+          - logger.log:
+              format: "SoC = %.1f %%"
+              args: ["x"]
+
+    battery_voltage:
+      name: "Battery Voltage"
+
+    current:
+      name: "Battery Current"
+
+    remaining_capacity:
+      name: "Battery Remaining"
+
+    time_to_empty:
+      name: "Battery TTE"
+
+    temperature:
+      name: "Battery Temperature"
