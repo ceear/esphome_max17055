@@ -60,7 +60,11 @@ sensor:
     charge_termination_current_ma: 150   # IChgTerm in mA (~C/20 typical)
     empty_voltage_mv: 3000               # VEmpty: below this = empty
     recovery_voltage_mv: 3800            # VRecovery: hysteresis recovery point
-    charge_voltage_above_4v275: false    # true = high-voltage Li-ion (4.35 V)
+    # Supported values: li_ion (default) | li_ion_hv
+    #   li_ion    – standard Li-ion / LiPo, charge ≤ 4.2 V  (ModelCFG 0x8000)
+    #   li_ion_hv – high-voltage Li-ion e.g. NMC/NCA, charge ≤ 4.35 V  (ModelCFG 0x8400)
+    # LiFePO4 / LFP is NOT supported – see Known Limitations.
+    battery_chemistry: li_ion
 
     skip_initialization: false           # true = skip EZ-config (debug only)
     force_init: false                    # true = always run EZ-config
@@ -166,7 +170,7 @@ sensor:
     sense_resistor_mohm: 10
     charge_termination_current_ma: 100
     empty_voltage_mv: 3000
-    charge_voltage_above_4v275: false
+    battery_chemistry: li_ion
 
     state_of_charge:
       name: "Battery"
@@ -229,6 +233,14 @@ The dump logs all key registers on every `update()` call.  Check that:
 
 ## Known Limitations
 
+- **LiFePO4 / LFP is not supported.** The MAX17055 ModelGauge m5 EZ algorithm
+  ships with exactly two pre-loaded OCV models: standard Li-ion (`li_ion`) and
+  high-voltage Li-ion (`li_ion_hv`). LFP has a fundamentally different, very
+  flat discharge curve — using either Li-ion model produces severely wrong SoC
+  readings across most of the useful SoC range. Supporting LFP requires custom
+  model loading (writing the full OCV table to the chip), which is not
+  implemented in this component. Attempting to set `battery_chemistry: lifepo4`
+  will produce a clear error at ESPHome config-parse time.
 - NTC/AIN temperature requires manually setting `Config.Tsel` bit; not exposed
   as a YAML option in this version.
 - Learned parameter persistence across Variant B power cycles (NVS save/restore
