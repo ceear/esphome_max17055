@@ -1,4 +1,4 @@
-# esphome-max17055
+# esphome_max17055
 
 ESPHome external component for the **Maxim / Analog Devices MAX17055**
 ModelGauge m5 EZ fuel gauge IC.
@@ -134,7 +134,7 @@ Battery (−) ──────────────────────
 external_components:
   - source:
       type: git
-      url: https://github.com/ceear/esphome-max17055
+      url: https://github.com/ceear/esphome_max17055
       ref: main
     components: [max17055]
 ```

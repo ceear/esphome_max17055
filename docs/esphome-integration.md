@@ -106,7 +106,7 @@ template:
 external_components:
   - source:
       type: git
-      url: https://github.com/ceear/esphome-max17055
+      url: https://github.com/ceear/esphome_max17055
       ref: main
     components: [max17055]
 ```
@@ -116,6 +116,6 @@ For local development:
 external_components:
   - source:
       type: local
-      path: /path/to/esphome-max17055/components
+      path: /path/to/esphome_max17055/components
     components: [max17055]
 ```

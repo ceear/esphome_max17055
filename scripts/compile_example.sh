@@ -14,7 +14,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENV_DIR="${REPO_ROOT}/.venv"
 SECRETS_FILE="${REPO_ROOT}/secrets.yaml"
-ESPHOME_VERSION_REQ="2023.6"
+ESPHOME_VERSION_REQ="2024.6"  # minimum: DEVICE_CLASS_DURATION + current sensor_schema API
 
 # ── Colour helpers ────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
@@ -58,7 +58,18 @@ else
   # pip install --quiet --upgrade esphome
 fi
 
+# ── Version check ─────────────────────────────────────────────────────────────
 ESPHOME_VER=$(esphome version 2>/dev/null | head -1)
+INSTALLED_YEAR=$(esphome version 2>/dev/null | grep -oE '[0-9]{4}\.[0-9]+' | head -1 | cut -d. -f1 || echo "0")
+INSTALLED_MON=$(esphome  version 2>/dev/null | grep -oE '[0-9]{4}\.[0-9]+' | head -1 | cut -d. -f2 || echo "0")
+REQ_YEAR=$(echo "${ESPHOME_VERSION_REQ}" | cut -d. -f1)
+REQ_MON=$(echo  "${ESPHOME_VERSION_REQ}" | cut -d. -f2)
+if [[ ${INSTALLED_YEAR} -lt ${REQ_YEAR} ]] || \
+   [[ ${INSTALLED_YEAR} -eq ${REQ_YEAR} && ${INSTALLED_MON} -lt ${REQ_MON} ]]; then
+  err "ESPHome ${INSTALLED_YEAR}.${INSTALLED_MON} is older than required ${ESPHOME_VERSION_REQ}"
+  err "Run: pip install --upgrade esphome"
+  exit 1
+fi
 ok "Using: ${ESPHOME_VER}"
 echo "Python: ${PYVER}"
 echo ""
