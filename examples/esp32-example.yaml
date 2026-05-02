@@ -3,7 +3,7 @@
 #
 # Hardware assumptions:
 #   • 1S LiPo / Li-ion cell, nominal 3.7 V, design capacity 2000 mAh
-#   • Charge voltage ≤ 4.2 V  → charge_voltage_above_4v275: false
+#   • Charge voltage ≤ 4.2 V  → battery_chemistry: li_ion
 #   • 10 mΩ sense resistor placed IN the main charge/discharge path
 #     (between BAT pin and the rest of the circuit)
 #   • MAX17055 supplied from the cell (BAT rail), not just 3.3 V
@@ -73,7 +73,7 @@ sensor:
     charge_termination_current_ma: 100 # IChgTerm: end-of-charge detection (~C/20)
     empty_voltage_mv: 3000            # VEmpty: cell considered empty at 3.0 V
     recovery_voltage_mv: 3800         # VRecovery: hysteresis recovery point
-    charge_voltage_above_4v275: false  # true = high-voltage cell (e.g. 4.35 V)
+    battery_chemistry: li_ion           # li_ion | li_ion_hv (NMC/NCA ≤4.35V)
 
     # ── Optional flags ────────────────────────────────────────────────────
     debug_registers: false   # set true during development; logs all registers

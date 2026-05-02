@@ -28,7 +28,19 @@ DEPENDENCIES = ["i2c"]
 # ── Custom units not in esphome.const ────────────────────────────────────────
 UNIT_MILLIAMPERE_HOUR = "mAh"
 
+# ── Battery chemistry values ──────────────────────────────────────────────────
+# These are the only chemistries whose OCV curves are embedded in the
+# MAX17055 ModelGauge m5 EZ pre-loaded models (datasheet / UG6595).
+CHEMISTRY_LI_ION    = "li_ion"     # standard Li-ion / LiPo, charge ≤ 4.2 V
+CHEMISTRY_LI_ION_HV = "li_ion_hv"  # high-voltage Li-ion (NMC/NCA), charge ≤ 4.35 V
+# The following chemistry is recognised in YAML so we can emit a clear error:
+CHEMISTRY_LIFEPO4   = "lifepo4"
+
+_SUPPORTED_CHEMISTRIES = [CHEMISTRY_LI_ION, CHEMISTRY_LI_ION_HV]
+_ALL_CHEMISTRIES       = _SUPPORTED_CHEMISTRIES + [CHEMISTRY_LIFEPO4]
+
 # ── YAML config key constants ─────────────────────────────────────────────────
+CONF_BATTERY_CHEMISTRY        = "battery_chemistry"
 CONF_BATTERY_VOLTAGE          = "battery_voltage"
 CONF_CURRENT                  = "current"
 CONF_AVG_CURRENT              = "average_current"
@@ -47,23 +59,67 @@ CONF_CHARGE_TERM_CURRENT_MA   = "charge_termination_current_ma"
 CONF_EMPTY_VOLTAGE_MV         = "empty_voltage_mv"
 CONF_RECOVERY_VOLTAGE_MV      = "recovery_voltage_mv"
 CONF_RSENSE_MOHM              = "sense_resistor_mohm"
-CONF_CHARGE_VOLTAGE_HIGH      = "charge_voltage_above_4v275"
 CONF_SKIP_INITIALIZATION      = "skip_initialization"
 CONF_FORCE_INIT               = "force_init"
 CONF_DEBUG_REGISTERS          = "debug_registers"
 CONF_ENABLE_SLEEP_MODE        = "enable_sleep_mode"
 
-# ── Sensor schemas ────────────────────────────────────────────────────────────
-# Current and capacity sensors are only meaningful when a sense resistor is
-# wired in the charge/discharge path.  The validation below warns when those
-# sensors are configured but sense_resistor_mohm is left at 0 or absent.
 
-CONFIG_SCHEMA = (
+# ── Per-field validators ──────────────────────────────────────────────────────
+
+def _validate_chemistry(value):
+    """Accept supported chemistries; reject known-unsupported ones with a clear message."""
+    value = str(value).lower()
+    if value == CHEMISTRY_LIFEPO4:
+        raise cv.Invalid(
+            "LiFePO4 / LFP is not supported by the MAX17055 ModelGauge m5 EZ "
+            "algorithm.  The EZ config provides only two pre-loaded OCV models: "
+            "'li_ion' (standard Li-ion / LiPo, charge ≤ 4.2 V) and 'li_ion_hv' "
+            "(high-voltage Li-ion e.g. NMC/NCA, charge ≤ 4.35 V).  LFP has a "
+            "fundamentally different, very flat OCV curve — using either Li-ion "
+            "model would produce severely wrong SoC readings across most of the "
+            "useful state-of-charge range.  Supporting LFP requires custom model "
+            "loading (writing the OCV table to the chip), which is not "
+            "implemented in this component."
+        )
+    return cv.one_of(*_SUPPORTED_CHEMISTRIES, lower=True)(value)
+
+
+# ── Cross-field validators ────────────────────────────────────────────────────
+
+def _validate_rsense_for_current_sensors(config):
+    """Error if current/capacity sensors are requested without a sense resistor."""
+    needs_rsense = (
+        CONF_CURRENT in config
+        or CONF_AVG_CURRENT in config
+        or CONF_REMAINING_CAPACITY in config
+        or CONF_FULL_CAPACITY in config
+    )
+    if needs_rsense and config.get(CONF_RSENSE_MOHM, 0) == 0:
+        raise cv.Invalid(
+            "current, average_current, remaining_capacity, and full_capacity "
+            "require a correctly placed sense resistor.  Set sense_resistor_mohm "
+            "to the actual shunt value (e.g. 10 for 10 mΩ).  Without a shunt in "
+            "the charge/discharge path these values will be incorrect."
+        )
+    return config
+
+
+# ── Main schema ───────────────────────────────────────────────────────────────
+
+CONFIG_SCHEMA = cv.All(
     cv.Schema(
         {
             cv.GenerateID(): cv.declare_id(MAX17055Component),
 
-            # ── Hardware parameters ──────────────────────────────────────────
+            # ── Battery chemistry ──────────────────────────────────────────
+            # Determines which pre-loaded OCV model the MAX17055 uses.
+            # li_ion    → ModelCFG = 0x8000  (standard Li-ion / LiPo, ≤ 4.2 V)
+            # li_ion_hv → ModelCFG = 0x8400  (high-voltage Li-ion, ≤ 4.35 V)
+            cv.Optional(CONF_BATTERY_CHEMISTRY, default=CHEMISTRY_LI_ION):
+                _validate_chemistry,
+
+            # ── Hardware parameters ────────────────────────────────────────
             cv.Optional(CONF_DESIGN_CAPACITY_MAH, default=3000):
                 cv.int_range(min=1, max=32767),
             cv.Optional(CONF_CHARGE_TERM_CURRENT_MA, default=200):
@@ -75,17 +131,13 @@ CONFIG_SCHEMA = (
             cv.Optional(CONF_RSENSE_MOHM, default=10):
                 cv.int_range(min=1, max=1000),
 
-            # True  → ModelCFG = 0x8400 (high-voltage Li-ion, charge > 4.275 V)
-            # False → ModelCFG = 0x8000 (standard Li-ion, charge ≤ 4.275 V)
-            cv.Optional(CONF_CHARGE_VOLTAGE_HIGH, default=True): cv.boolean,
-
-            # ── Behaviour flags ──────────────────────────────────────────────
+            # ── Behaviour flags ────────────────────────────────────────────
             cv.Optional(CONF_SKIP_INITIALIZATION, default=False): cv.boolean,
             cv.Optional(CONF_FORCE_INIT,          default=False): cv.boolean,
             cv.Optional(CONF_DEBUG_REGISTERS,     default=False): cv.boolean,
             cv.Optional(CONF_ENABLE_SLEEP_MODE,   default=False): cv.boolean,
 
-            # ── Sensors (all optional) ────────────────────────────────────────
+            # ── Sensors (all optional) ─────────────────────────────────────
             cv.Optional(CONF_BATTERY_VOLTAGE): sensor.sensor_schema(
                 unit_of_measurement=UNIT_VOLT,
                 accuracy_decimals=3,
@@ -171,29 +223,9 @@ CONFIG_SCHEMA = (
         }
     )
     .extend(cv.polling_component_schema("60s"))
-    .extend(i2c.i2c_device_schema(0x36))
+    .extend(i2c.i2c_device_schema(0x36)),
+    _validate_rsense_for_current_sensors,
 )
-
-
-def _validate_rsense_for_current_sensors(config):
-    """Warn if current/capacity sensors are used without a configured Rsense."""
-    needs_rsense = (
-        CONF_CURRENT in config
-        or CONF_AVG_CURRENT in config
-        or CONF_REMAINING_CAPACITY in config
-        or CONF_FULL_CAPACITY in config
-    )
-    if needs_rsense and config.get(CONF_RSENSE_MOHM, 0) == 0:
-        raise cv.Invalid(
-            "current, average_current, remaining_capacity, and full_capacity "
-            "require a correctly placed sense resistor.  Set sense_resistor_mohm "
-            "to the actual shunt value (e.g. 10 for 10 mΩ).  Without a sense "
-            "resistor in the charge/discharge path these values will be wrong."
-        )
-    return config
-
-
-CONFIG_SCHEMA = cv.All(CONFIG_SCHEMA, _validate_rsense_for_current_sensors)
 
 
 async def to_code(config):
@@ -207,7 +239,10 @@ async def to_code(config):
     cg.add(var.set_empty_voltage(config[CONF_EMPTY_VOLTAGE_MV]))
     cg.add(var.set_recovery_voltage(config[CONF_RECOVERY_VOLTAGE_MV]))
     cg.add(var.set_rsense_mohm(config[CONF_RSENSE_MOHM]))
-    cg.add(var.set_charge_voltage_high(config[CONF_CHARGE_VOLTAGE_HIGH]))
+
+    # Map chemistry string → charge_voltage_high bool for the C++ layer
+    chemistry = config[CONF_BATTERY_CHEMISTRY]
+    cg.add(var.set_charge_voltage_high(chemistry == CHEMISTRY_LI_ION_HV))
 
     # ── Behaviour flags ──────────────────────────────────────────────────────
     cg.add(var.set_skip_initialization(config[CONF_SKIP_INITIALIZATION]))

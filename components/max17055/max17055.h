@@ -162,7 +162,7 @@ class MAX17055Component : public PollingComponent, public i2c::I2CDevice {
   uint16_t empty_voltage_mv_       {3300};
   uint16_t recovery_voltage_mv_    {3880};
   uint16_t rsense_mohm_            {10};
-  bool     charge_voltage_high_    {true};   // true  → ModelCFG = 0x8400
+  bool     charge_voltage_high_    {false};  // false → ModelCFG = 0x8000 (li_ion default)
   bool     skip_initialization_    {false};
   bool     force_init_             {false};
   bool     debug_registers_        {false};
