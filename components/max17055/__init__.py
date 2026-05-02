@@ -5,7 +5,7 @@
 import esphome.codegen as cg
 from esphome.components import i2c
 
-CODEOWNERS = ["@esphome-max17055"]
+CODEOWNERS = ["@ceear"]
 DEPENDENCIES = ["i2c"]
 AUTO_LOAD = ["sensor"]
 

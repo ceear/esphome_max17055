@@ -134,7 +134,7 @@ Battery (−) ──────────────────────
 external_components:
   - source:
       type: git
-      url: https://github.com/YOUR_USERNAME/esphome-max17055
+      url: https://github.com/ceear/esphome-max17055
       ref: main
     components: [max17055]
 ```

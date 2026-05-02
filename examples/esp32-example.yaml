@@ -26,11 +26,11 @@ esp32:
   framework:
     type: arduino
 
-# Reference the external component from the repo root
 external_components:
   - source:
-      type: local
-      path: ../components
+      type: git
+      url: https://github.com/ceear/esphome-max17055
+      ref: main
     components: [max17055]
 
 # Logging – set to DEBUG during first-time setup to see init sequence
